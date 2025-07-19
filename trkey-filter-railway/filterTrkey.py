@@ -8,20 +8,66 @@ try:
 except ImportError:
     from telethon.errors.rpcerrorlist import FloodWaitError as FloodWait
 import asyncio, time
+import json # لإدارة ملفات JSON
 
 # ============== بيانات الدخول والإعدادات ==============
 # الـ API ID والـ API Hash الخاصين بحسابك الشخصي (Userbot)
 # **تأكد أن هذه القيم صحيحة من my.telegram.org**
-api_id = 23873818
-api_hash = '0fb82e50665a5406979304c7fce10a6f'
+api_id = 25202058
+api_hash = 'ff6480cf0caf92223033f597401e5bf4'
 
 # توكن البوت اللي أنت عاوزه يشتغل كواجهة (من @BotFather)
-BOT_TOKEN = '7719445927:AAFPNJX4nvmTbXBHOWOr6F_pIFuaLG6yNeg' # تأكد أن هذا التوكن هو بتاعك
+BOT_TOKEN = '1887695108:AAFa9-aK9qS8Y7cHXjb_Hw_-KbKgX787Zz8'# تأكد أن هذا التوكن هو بتاعك
 
 # معلومات المطور والقناة (للاستخدام في الخاص فقط)
-DEV_USERNAME = "developer: @XCODE000" 
-CHANNEL_LINK_DISPLAY_TEXT = "TiTo" # النص اللي هيظهر للينك
-CHANNEL_LINK_URL = "https://t.me/l_zor_l"
+DEV_USERNAME = "developer: @x_4_f"  
+CHANNEL_LINK_DISPLAY_TEXT = "source" # النص اللي هيظهر للينك
+CHANNEL_LINK_URL = "https://t.me/ALTRKI_Story"
+
+# ==================== إعدادات المستخدمين المسموح لهم ====================
+# سيتم تحميل هذه القيم من ملف config.json
+ALLOWED_USER_IDS = []
+ALLOWED_USERNAMES = []
+
+# اسم ملف الإعدادات
+CONFIG_FILE = 'config.json'
+
+# قاموس لتخزين حالة المستخدمين (مثلاً: هل ينتظر البوت منهم معرف مستخدم؟)
+USER_STATE = {} # {user_id: "waiting_for_admin_id"}
+
+# دالة لتحميل الإعدادات من ملف JSON
+def load_config():
+    global ALLOWED_USER_IDS, ALLOWED_USERNAMES
+    try:
+        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+            ALLOWED_USER_IDS = config.get('allowed_user_ids', [])
+            ALLOWED_USERNAMES = config.get('allowed_usernames', [])
+            print(f"Loaded config: IDs={ALLOWED_USER_IDS}, Usernames={ALLOWED_USERNAMES}")
+    except FileNotFoundError:
+        print(f"{CONFIG_FILE} not found. Creating with default owner ID.")
+        # تعيين الـ ID الخاص بك كمالك عند أول تشغيل إذا لم يوجد ملف الإعدادات
+        ALLOWED_USER_IDS = [6258807551] # <<<<< تأكد أن هذا هو الـ ID الخاص بك كمالك
+        ALLOWED_USERNAMES = []
+        save_config() # حفظ الإعدادات الافتراضية
+    except json.JSONDecodeError:
+        print(f"Error decoding {CONFIG_FILE}. It might be corrupted. Creating new config.")
+        ALLOWED_USER_IDS = [6258807551]
+        ALLOWED_USERNAMES = []
+        save_config()
+
+# دالة لحفظ الإعدادات إلى ملف JSON
+def save_config():
+    config = {
+        'allowed_user_ids': ALLOWED_USER_IDS,
+        'allowed_usernames': ALLOWED_USERNAMES
+    }
+    with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+        json.dump(config, f, indent=4, ensure_ascii=False)
+    print(f"Saved config: IDs={ALLOWED_USER_IDS}, Usernames={ALLOWED_USERNAMES}")
+
+# تحميل الإعدادات عند بدء تشغيل السكريبت
+load_config()
 
 # إنشاء الكلاينت: سيعمل كـ Userbot (بصلاحيات حسابك) وسيستقبل الأوامر كبوت (بالتوكن)
 cli = TelegramClient("tito_session", api_id, api_hash).start(bot_token=BOT_TOKEN)
@@ -40,6 +86,17 @@ CHAT_INVITE_LINKS = {}
 START_MESSAGES_TO_DELETE = {}
 
 # --- وظائف مساعدة ---
+
+# دالة للتحقق مما إذا كان المستخدم مسموحًا له باستخدام البوت
+async def is_user_allowed(user_id, username):
+    # تحقق من الـ ID
+    if user_id in ALLOWED_USER_IDS:
+        return True
+    # تحقق من اسم المستخدم (إذا كان موجوداً وتم إدخاله في القائمة)
+    if username and username.lower() in [u.lower() for u in ALLOWED_USERNAMES]:
+        return True
+    return False
+
 
 # حظر مستخدم مع تجاوز FloodWait والأخطاء الشائعة
 async def ban_user(chat_id, user_id):
@@ -113,7 +170,7 @@ async def re_join_chat(chat_id):
 async def blitz_cleanup(chat_id):
     queue = asyncio.Queue()
     counter_list = [0]
-    users_to_ban = [] 
+    users_to_ban = []  
 
     print(f"Starting blitz cleanup for {chat_id}: Gathering all participants first...")
     start_gather_time = time.time()
@@ -130,7 +187,7 @@ async def blitz_cleanup(chat_id):
                 print(f"No invite link available for {chat_id}. Automatic re-join might fail.")
         except Exception as e:
             print(f"Could not get invite link for {chat_id}: {e} (suppressed message for user)")
-            pass 
+            pass  
 
     try:
         # استخدام aggressive=True لجمع أكبر عدد ممكن من المشاركين بسرعة
@@ -147,7 +204,7 @@ async def blitz_cleanup(chat_id):
             print(f"Bot lost access to chat {chat_id} during gather. Attempting to re-join and stopping cleanup.")
             STOP_CLEANUP.add(chat_id)
             await re_join_chat(chat_id) # حاول يرجع بس بصمت
-            return 
+            return  
 
     # بدء العمال بعد جمع كل المستخدمين
     # زيادة عدد العمال بشكل كبير جداً لتحقيق أقصى سرعة
@@ -162,7 +219,7 @@ async def blitz_cleanup(chat_id):
     
     # إرسال قيم الحراسة للعمال ليتوقفوا بعد إفراغ الـ queue
     for _ in workers_tasks:
-        await queue.put(None) 
+        await queue.put(None)  
 
     print(f"All {len(users_to_ban)} users added to queue. Waiting for workers to finish...")
     start_ban_time = time.time()
@@ -183,15 +240,21 @@ async def blitz_cleanup(chat_id):
 @cli.on(events.NewMessage(pattern='/start'))
 async def start_command(event):
     if event.is_private:
+        # تحقق من صلاحية المستخدم: هل هو ضمن المسموح لهم؟
+        sender = await event.get_sender()
+        if not await is_user_allowed(sender.id, sender.username):
+            await event.respond("🚫 عفواً، هذا البوت مخصص للاستخدام من قبل مستخدمين معينين فقط.")
+            return
+
         me = await event.client.get_me()
         await event.respond(
-            f"""✨ مرحباً بك في عالم تيتو! ✨
+            f"""✨ مرحباً بك في عالم **تركي**! ✨
 
 أنا هنا لأجعل مجموعتك أكثر نظاماً ونظافة.
 أقوم بتصفية الأعضاء غير المرغوب فيهم بسرعة وكفاءة عالية.
 
 🔥 *كيف أبدأ العمل؟*
-فقط أرسل كلمة «تيتو» في المجموعة وسأبدأ مهمتي فوراً.
+فقط أرسل كلمة «تركي» في المجموعة وسأبدأ مهمتي فوراً.
 
 🛑 *لإيقاف التصفية:* أرسل كلمة «بس» في المجموعة.
 
@@ -200,21 +263,28 @@ async def start_command(event):
             buttons=[
                 [Button.inline("🛠 الأوامر", b"commands")],
                 [Button.url("📢 انضم للقناة", CHANNEL_LINK_URL)],
-                [Button.url("➕ أضفني لمجموعتك", f"https://t.me/{me.username}?startgroup=true")]
+                [Button.url("➕ أضفني لمجموعتك", f"https://t.me/{me.username}?startgroup=true")],
+                [Button.inline("👤 إدارة المسؤولين", b"manage_admins")] # زر جديد لإدارة المسؤولين
             ]
         )
     elif event.is_group:
-        # لا يرد على /start في المجموعات على الإطلاق
+        # لا يرد على /start في المجموعات على الإطلاق ليبقى صامتاً
         pass
 
 # زر الأوامر والرجوع (فقط في الخاص)
 @cli.on(events.CallbackQuery(data=b"commands"))
 async def command_help_callback(event):
     await event.answer()
+    # تحقق من صلاحية المستخدم
+    sender = await event.get_sender()
+    if not await is_user_allowed(sender.id, sender.username):
+        await event.edit("🚫 عفواً، لا تملك الصلاحية للوصول إلى هذه الأوامر.")
+        return
+
     await event.edit(
         """🧠 *طريقة التشغيل:*
 
-- أرسل كلمة `تيتو` في أي مجموعة وأنا مشرف فيها وسأبدأ التصفية فوراً.
+- أرسل كلمة `تركي` في أي مجموعة وأنا مشرف فيها وسأبدأ التصفية فوراً.
 - أرسل `بس` لإيقاف التصفية.
 
 📌 *ملاحظة هامة:* تأكد أن البوت لديه صلاحيات المشرف الكاملة و'حظر المستخدمين' و'حذف الرسائل' ليعمل بكفاءة.""",
@@ -224,15 +294,21 @@ async def command_help_callback(event):
 @cli.on(events.CallbackQuery(data=b"back_to_start"))
 async def back_to_start_callback(event):
     await event.answer()
+    # تحقق من صلاحية المستخدم
+    sender = await event.get_sender()
+    if not await is_user_allowed(sender.id, sender.username):
+        await event.edit("🚫 عفواً، لا تملك الصلاحية للوصول.")
+        return
+
     me = await event.client.get_me()
     await event.edit(
-        f"""✨ مرحباً بك في عالم تيتو! ✨
+        f"""✨ مرحباً بك في عالم **تركي**! ✨
 
 أنا هنا لأجعل مجموعتك أكثر نظاماً ونظافة.
 أقوم بتصفية الأعضاء غير المرغوب فيهم بسرعة وكفاءة عالية.
 
 🔥 *كيف أبدأ العمل؟*
-فقط أرسل كلمة «تيتو» في المجموعة وسأبدأ مهمتي فوراً.
+فقط أرسل كلمة «تركي» في المجموعة وسأبدأ مهمتي فوراً.
 
 🛑 *لإيقاف التصفية:* أرسل كلمة «بس» في المجموعة.
 
@@ -241,15 +317,152 @@ async def back_to_start_callback(event):
             buttons=[
                 [Button.inline("🛠 الأوامر", b"commands")],
                 [Button.url("📢 انضم للقناة", CHANNEL_LINK_URL)],
-                [Button.url("➕ أضفني لمجموعتك", f"https://t.me/{me.username}?startgroup=true")]
+                [Button.url("➕ أضفني لمجموعتك", f"https://t.me/{me.username}?startgroup=true")],
+                [Button.inline("👤 إدارة المسؤولين", b"manage_admins")] # زر إدارة المسؤولين
             ]
     )
 
-# أمر "تيتو" لبدء التصفية (الرد الوحيد في المجموعة و سيتم حذفه فوراً)
-@cli.on(events.NewMessage(pattern='(?i)تيتو', chats=None))
+# وظيفة لمعالجة زر إدارة المسؤولين (الرئيسي)
+@cli.on(events.CallbackQuery(data=b"manage_admins"))
+async def manage_admins_callback(event):
+    await event.answer()
+    # تأكد أن المستخدم الذي يضغط على الزر هو المالك
+    sender = await event.get_sender()
+    if sender.id != ALLOWED_USER_IDS[0]: # نفترض أن أول ID في القائمة هو المالك
+        await event.edit("🚫 عفواً، هذه الميزة مخصصة للمالك فقط.")
+        return
+
+    await event.edit(
+        """**👤 إدارة المسؤولين:**
+
+اختر الإجراء المطلوب:""",
+        buttons=[
+            [Button.inline("➕ إضافة مشرف جديد", b"add_new_admin_prompt")],
+            [Button.inline("➖ إزالة مشرف", b"remove_admin_prompt")], # زر إزالة مشرف جديد
+            [Button.inline("📋 عرض المشرفين الحاليين", b"view_current_admins")],
+            [Button.inline("🔙 رجوع", b"back_to_start")]
+        ]
+    )
+
+# وظيفة للطلب من المالك إرسال ID المشرف الجديد
+@cli.on(events.CallbackQuery(data=b"add_new_admin_prompt"))
+async def add_new_admin_prompt(event):
+    await event.answer()
+    sender = await event.get_sender()
+    if sender.id != ALLOWED_USER_IDS[0]:
+        await event.edit("🚫 عفواً، هذه الميزة مخصصة للمالك فقط.")
+        return
+    
+    USER_STATE[sender.id] = "waiting_for_admin_id_to_add" # تغيير الحالة لتمييزها
+    await event.edit("الرجاء إرسال **معرف المستخدم (ID)** للمشرف الجديد:\n\n*ملاحظة: للحصول على الـ ID، أعد توجيه أي رسالة من المستخدم إلى @userinfobot.*",
+                     buttons=[Button.inline("إلغاء", b"cancel_admin_action")])
+
+# وظيفة للطلب من المالك إرسال ID المشرف المراد إزالته
+@cli.on(events.CallbackQuery(data=b"remove_admin_prompt"))
+async def remove_admin_prompt(event):
+    await event.answer()
+    sender = await event.get_sender()
+    if sender.id != ALLOWED_USER_IDS[0]:
+        await event.edit("🚫 عفواً، هذه الميزة مخصصة للمالك فقط.")
+        return
+    
+    USER_STATE[sender.id] = "waiting_for_admin_id_to_remove" # حالة جديدة للإزالة
+    await event.edit("الرجاء إرسال **معرف المستخدم (ID)** للمشرف الذي تريد إزالته:",
+                     buttons=[Button.inline("إلغاء", b"cancel_admin_action")])
+
+# وظيفة لإلغاء أي عملية إضافة/إزالة مشرف
+@cli.on(events.CallbackQuery(data=b"cancel_admin_action"))
+async def cancel_admin_action(event):
+    await event.answer()
+    sender = await event.get_sender()
+    if sender.id in USER_STATE:
+        del USER_STATE[sender.id]
+        await event.edit("تم إلغاء العملية.",
+                         buttons=[Button.inline("🔙 رجوع", b"manage_admins")]) # العودة لخيارات إدارة المسؤولين
+    else:
+        await event.edit("لا توجد عملية جارية لإلغائها.",
+                         buttons=[Button.inline("🔙 رجوع", b"manage_admins")])
+
+# وظيفة معالجة الرسائل الواردة (لإضافة أو إزالة الـ ID)
+@cli.on(events.NewMessage(incoming=True)) # يستمع لكل الرسائل الواردة
+async def handle_admin_id_input(event):
+    sender_id = event.sender_id
+    if sender_id != ALLOWED_USER_IDS[0]: # فقط المالك يمكنه استخدام هذه الوظيفة
+        return
+
+    if sender_id in USER_STATE:
+        try:
+            target_id = int(event.text.strip())
+            
+            if USER_STATE[sender_id] == "waiting_for_admin_id_to_add":
+                if target_id in ALLOWED_USER_IDS:
+                    await event.reply("هذا المعرف موجود بالفعل في قائمة المشرفين.")
+                else:
+                    ALLOWED_USER_IDS.append(target_id)
+                    save_config()
+                    await event.reply(f"تمت إضافة المعرف `{target_id}` بنجاح كمسؤول جديد!",
+                                      buttons=[Button.inline("🔙 رجوع", b"manage_admins")])
+            
+            elif USER_STATE[sender_id] == "waiting_for_admin_id_to_remove":
+                if target_id == ALLOWED_USER_IDS[0]:
+                    await event.reply("لا يمكنك إزالة الـ ID الخاص بك كمالك البوت.")
+                elif target_id not in ALLOWED_USER_IDS:
+                    await event.reply("هذا المعرف غير موجود في قائمة المشرفين.")
+                else:
+                    ALLOWED_USER_IDS.remove(target_id)
+                    save_config()
+                    await event.reply(f"تمت إزالة المعرف `{target_id}` بنجاح من قائمة المسؤولين!",
+                                      buttons=[Button.inline("🔙 رجوع", b"manage_admins")])
+            
+            del USER_STATE[sender_id] # مسح الحالة بعد المعالجة
+        except ValueError:
+            await event.reply("الرجاء إرسال معرف مستخدم (ID) صحيح (أرقام فقط).")
+        except Exception as e:
+            print(f"Error processing admin ID: {e}")
+            await event.reply("حدث خطأ أثناء معالجة طلبك. الرجاء المحاولة مرة أخرى.")
+        finally:
+            # محاولة حذف رسالة المستخدم التي تحتوي على الـ ID بعد المعالجة
+            try:
+                await event.delete()
+            except Exception:
+                pass # تجاهل لو الرسالة متحذفتش
+
+# وظيفة لعرض المشرفين الحاليين
+@cli.on(events.CallbackQuery(data=b"view_current_admins"))
+async def view_current_admins(event):
+    await event.answer()
+    sender = await event.get_sender()
+    if sender.id != ALLOWED_USER_IDS[0]:
+        await event.edit("🚫 عفواً، هذه الميزة مخصصة للمالك فقط.")
+        return
+    
+    ids_str = "\n".join(map(str, ALLOWED_USER_IDS)) if ALLOWED_USER_IDS else "لا يوجد."
+    usernames_str = "\n".join(ALLOWED_USERNAMES) if ALLOWED_USERNAMES else "لا يوجد."
+
+    message = f"""**📋 المشرفون الحاليون:**
+
+**معرفات المستخدمين (IDs):**
+`{ids_str}`
+
+**أسماء المستخدمين (Usernames):**
+`{usernames_str}`
+
+"""
+    await event.edit(message, buttons=[Button.inline("🔙 رجوع", b"manage_admins")]) # العودة لخيارات إدارة المسؤولين
+
+
+# أمر "تركي" لبدء التصفية (الرد الوحيد في المجموعة و سيتم حذفه فوراً)
+@cli.on(events.NewMessage(pattern='(?i)تركي', chats=None))
 async def start_cleanup_command(event):
     if not event.is_group and not event.is_channel:
-        return 
+        return  
+
+    # تحقق من صلاحية المستخدم قبل معالجة الأمر في المجموعات والقنوات
+    sender = await event.get_sender()
+    if not await is_user_allowed(sender.id, sender.username):
+        # لا يرد على المستخدم في المجموعة/القناة، فقط يسجل محاولة غير مصرح بها
+        print(f"Unauthorized user {sender.id} (@{sender.username}) attempted to start cleanup in {event.chat_id}.")
+        return
 
     chat_id = event.chat_id
     me = await cli.get_me()
@@ -326,6 +539,13 @@ async def stop_cleanup_command(event):
     if not event.is_group and not event.is_channel:
         pass # لا يرد على "بس" في الخاص
 
+    # تحقق من صلاحية المستخدم قبل معالجة الأمر في المجموعات والقنوات
+    sender = await event.get_sender()
+    if not await is_user_allowed(sender.id, sender.username):
+        # لا يرد على المستخدم في المجموعة/القناة، فقط يسجل محاولة غير مصرح بها
+        print(f"Unauthorized user {sender.id} (@{sender.username}) attempted to stop cleanup in {event.chat_id}.")
+        return
+
     chat_id = event.chat_id
     
     STOP_CLEANUP.add(chat_id)
@@ -379,7 +599,7 @@ async def new_members_action(event):
             print(f"Error checking permissions after addition to chat {event.chat_id}: {e}")
             pass
 
-print("🔥 تيتو - بوت التصفية الفاجر يعمل الآن!")
+print("🔥 تركي - بوت التصفية الفاجر يعمل الآن!")
 print(f"البوت يعمل بالتوكن: {BOT_TOKEN}")
 print(f"الحساب يعمل بالـ API ID: {api_id}")
 
