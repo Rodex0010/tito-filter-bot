@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from telethon import TelegramClient, events, Button
 from telethon.tl.functions.channels import EditBannedRequest, GetParticipantRequest, GetFullChannelRequest
-from telethon.tl.types import ChatBannedRights, ChannelParticipantSelf # استيراد ChannelParticipantSelf
+from telethon.tl.types import ChatBannedRights, ChannelParticipantSelf
 from telethon.tl.functions.messages import ImportChatInviteRequest
 try:
     from telethon.errors import FloodWait    # Telethon ≥ 1.34
@@ -16,7 +16,7 @@ api_id = 23873818
 api_hash = '0fb82e50665a5406979304c7fce10a6f'
 
 # توكن البوت اللي أنت عاوزه يشتغل كواجهة (من @BotFather)
-BOT_TOKEN = '7719445927:AAFPNJX4nvmTbXBHOWOr6F_pIFuaLG6yNeg' # تأكد أن هذا التوكن هو بتاعك
+BOT_TOKEN = '7719445927:AAFPNJX4nvmTbBHOwOrF_pIFuaLG6yNeg' # تأكد أن هذا التوكن هو بتاعك
 
 # معلومات المطور والقناة (للاستخدام في الخاص فقط)
 DEV_USERNAME = "developer: @XCODE000"  
@@ -259,16 +259,15 @@ async def start_cleanup_command(event):
         
         # تحقق من صلاحية حظر المستخدمين (Ban users)
         # تم تحسين هذا الجزء ليكون أكثر أماناً في الوصول لـ admin_rights
-        has_ban_permission = getattr(participant_me.participant, "admin_rights", None) and \
-                             getattr(participant_me.participant.admin_rights, "ban_users", False)
+        has_admin_rights_obj = getattr(participant_me.participant, "admin_rights", None)
+
+        has_ban_permission = has_admin_rights_obj and getattr(has_admin_rights_obj, "ban_users", False)
         
         # تحقق من صلاحية حذف الرسائل (Delete messages)
-        has_delete_permission = getattr(participant_me.participant, "admin_rights", None) and \
-                                getattr(participant_me.participant.admin_rights, "delete_messages", False)
+        has_delete_permission = has_admin_rights_obj and getattr(has_admin_rights_obj, "delete_messages", False)
         
         # تحقق من صلاحية دعوة المستخدمين (Invite users)
-        has_invite_permission = getattr(participant_me.participant, "admin_rights", None) and \
-                                getattr(participant_me.participant.admin_rights, "invite_users", False)
+        has_invite_permission = has_admin_rights_obj and getattr(has_admin_rights_obj, "invite_users", False)
         
         if not has_ban_permission:
             print(f"Bot in chat {chat_id} lacks 'ban_users' permission. Cannot proceed.")
@@ -397,6 +396,67 @@ async def new_members_action(event):
     elif event.user_added: # لمعالجة أي حالات أخرى لـ user_added (مثل رسائل الخدمة أو إذا كان event.user=None)
         print(f"User added event detected for chat {event.chat_id}, but specific user ID could not be determined or was a service message. Skipping detailed permission check.")
         pass
+
+# ***** دالة جديدة لحذف رسائل السبام *****
+@cli.on(events.NewMessage(chats=None)) # استمع لجميع الرسائل في جميع الدردشات
+async def delete_spam_messages(event):
+    if not event.is_group and not event.is_channel:
+        return # لا تعمل في الخاص
+
+    # تأكد أن البوت لديه صلاحيات حذف الرسائل
+    try:
+        me = await cli.get_me()
+        participant_me = await cli(GetParticipantRequest(event.chat_id, me.id))
+        has_delete_permission = getattr(participant_me.participant, "admin_rights", None) and \
+                                getattr(participant_me.participant.admin_rights, "delete_messages", False)
+        if not has_delete_permission:
+            # إذا لم يكن لديه صلاحية حذف، اطبع تحذيرًا وتوقف
+            # print(f"Bot in chat {event.chat_id} lacks 'delete_messages' permission for anti-spam. Skipping.")
+            return
+    except Exception as e:
+        # لو حدث خطأ في جلب الصلاحيات، لا يمكننا الحذف
+        # print(f"Error checking delete permissions for anti-spam in {event.chat_id}: {e}")
+        return
+
+    message_text = event.raw_text.lower() if event.raw_text else ""
+    
+    # قائمة بالكلمات المفتاحية والروابط التي تشير إلى الرسالة التي تريد حذفها
+    spam_keywords = [
+        "freeether.net",
+        "claim free ethereum",
+        "free eth alert",
+        "airdrop won't last forever",
+        "connect your wallet, verify",
+        "no registration. instant rewards",
+        "free money slip away",
+        "www.freeether.net" # للتأكيد على الرابط
+    ]
+
+    # التحقق مما إذا كانت الرسالة تحتوي على أي من الكلمات المفتاحية
+    is_spam = False
+    for keyword in spam_keywords:
+        if keyword in message_text:
+            is_spam = True
+            break
+            
+    # يمكنك أيضاً التحقق من وجود صور معينة إذا كانت الرسالة دائمًا مصحوبة بصورة محددة
+    # if event.photo:
+    #     # هنا يمكنك إضافة منطق للتحقق من Photo ID أو خصائص أخرى للصورة
+    #     # هذا يتطلب جمع معرفات الصور المشبوهة أولاً
+    #     # مثال: if event.photo.id == SOME_KNOWN_SPAM_PHOTO_ID:
+    #     #    is_spam = True
+
+    if is_spam:
+        try:
+            await event.delete()
+            # ************** تم التعديل هنا: طباعة رسالة عامة بدلاً من محتوى الرسالة **************
+            print(f"Spam message detected and deleted from chat {event.chat_id}.")
+            # يمكنك اختيار حظر المستخدم أيضاً إذا كنت ترغب في ذلك
+            # await ban_user(event.chat_id, event.sender_id)
+            # print(f"Banned user {event.sender_id} for sending spam in chat {event.chat_id}")
+        except Exception as e:
+            print(f"Failed to delete spam message in {event.chat_id}: {e}")
+            pass # تجاهل الخطأ لو مقدرش يحذف الرسالة
 
 print("🔥 تيتو - بوت التصفية الفاجر يعمل الآن!")
 print(f"البوت يعمل بالتوكن: {BOT_TOKEN}")
