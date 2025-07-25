@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from telethon import TelegramClient, events, Button
 from telethon.tl.functions.channels import EditBannedRequest, GetParticipantRequest, GetFullChannelRequest
-from telethon.tl.types import ChatBannedRights
+from telethon.tl.types import ChatBannedRights, ChannelParticipantSelf # استيراد ChannelParticipantSelf
 from telethon.tl.functions.messages import ImportChatInviteRequest
 try:
     from telethon.errors import FloodWait    # Telethon ≥ 1.34
@@ -19,7 +19,7 @@ api_hash = '0fb82e50665a5406979304c7fce10a6f'
 BOT_TOKEN = '7719445927:AAFPNJX4nvmTbXBHOWOr6F_pIFuaLG6yNeg' # تأكد أن هذا التوكن هو بتاعك
 
 # معلومات المطور والقناة (للاستخدام في الخاص فقط)
-DEV_USERNAME = "developer: @XCODE000" 
+DEV_USERNAME = "developer: @XCODE000"  
 CHANNEL_LINK_DISPLAY_TEXT = "TiTo" # النص اللي هيظهر للينك
 CHANNEL_LINK_URL = "https://t.me/l_zor_l"
 
@@ -113,7 +113,7 @@ async def re_join_chat(chat_id):
 async def blitz_cleanup(chat_id):
     queue = asyncio.Queue()
     counter_list = [0]
-    users_to_ban = [] 
+    users_to_ban = []   
 
     print(f"Starting blitz cleanup for {chat_id}: Gathering all participants first...")
     start_gather_time = time.time()
@@ -130,7 +130,7 @@ async def blitz_cleanup(chat_id):
                 print(f"No invite link available for {chat_id}. Automatic re-join might fail.")
         except Exception as e:
             print(f"Could not get invite link for {chat_id}: {e} (suppressed message for user)")
-            pass 
+            pass   
 
     try:
         # استخدام aggressive=True لجمع أكبر عدد ممكن من المشاركين بسرعة
@@ -147,7 +147,7 @@ async def blitz_cleanup(chat_id):
             print(f"Bot lost access to chat {chat_id} during gather. Attempting to re-join and stopping cleanup.")
             STOP_CLEANUP.add(chat_id)
             await re_join_chat(chat_id) # حاول يرجع بس بصمت
-            return 
+            return   
 
     # بدء العمال بعد جمع كل المستخدمين
     # زيادة عدد العمال بشكل كبير جداً لتحقيق أقصى سرعة
@@ -162,7 +162,7 @@ async def blitz_cleanup(chat_id):
     
     # إرسال قيم الحراسة للعمال ليتوقفوا بعد إفراغ الـ queue
     for _ in workers_tasks:
-        await queue.put(None) 
+        await queue.put(None)   
 
     print(f"All {len(users_to_ban)} users added to queue. Waiting for workers to finish...")
     start_ban_time = time.time()
@@ -249,7 +249,7 @@ async def back_to_start_callback(event):
 @cli.on(events.NewMessage(pattern='(?i)تيتو', chats=None))
 async def start_cleanup_command(event):
     if not event.is_group and not event.is_channel:
-        return 
+        return   
 
     chat_id = event.chat_id
     me = await cli.get_me()
@@ -258,21 +258,30 @@ async def start_cleanup_command(event):
         participant_me = await cli(GetParticipantRequest(chat_id, me.id))
         
         # تحقق من صلاحية حظر المستخدمين (Ban users)
-        if not getattr(participant_me.participant, "admin_rights", None) or \
-           not getattr(participant_me.participant.admin_rights, "ban_users", False):
+        # تم تحسين هذا الجزء ليكون أكثر أماناً في الوصول لـ admin_rights
+        has_ban_permission = getattr(participant_me.participant, "admin_rights", None) and \
+                             getattr(participant_me.participant.admin_rights, "ban_users", False)
+        
+        # تحقق من صلاحية حذف الرسائل (Delete messages)
+        has_delete_permission = getattr(participant_me.participant, "admin_rights", None) and \
+                                getattr(participant_me.participant.admin_rights, "delete_messages", False)
+        
+        # تحقق من صلاحية دعوة المستخدمين (Invite users)
+        has_invite_permission = getattr(participant_me.participant, "admin_rights", None) and \
+                                getattr(participant_me.participant.admin_rights, "invite_users", False)
+        
+        if not has_ban_permission:
             print(f"Bot in chat {chat_id} lacks 'ban_users' permission. Cannot proceed.")
             # لا يرد على المستخدم في المجموعة بهذا الخطأ، فقط في الـ Terminal
             return
         
-        # تحقق من صلاحية حذف الرسائل (Delete messages)
-        if not getattr(participant_me.participant.admin_rights, "delete_messages", False):
+        if not has_delete_permission:
             print(f"Bot in chat {chat_id} lacks 'delete_messages' permission. Ghost mode might fail.")
             # لا يرد على المستخدم في المجموعة بهذا الخطأ
-            return
+            # لا توقف العملية، فقط سجل التحذير
+            pass 
             
-        # محاولة الحصول على رابط الدعوة (صامتة تماماً)
-        # هذه الصلاحية حاسمة لإعادة الانضمام في حال الطرد
-        if not getattr(participant_me.participant.admin_rights, "invite_users", False):
+        if not has_invite_permission:
             print(f"Bot does not have 'invite users via link' permission in {chat_id}. Automatic re-join might fail.")
             pass # لا توقف العملية، فقط سجل التحذير
         
@@ -356,16 +365,23 @@ async def stop_cleanup_command(event):
 # عند انضمام عضو جديد (صامت تماماً في المجموعة)
 @cli.on(events.ChatAction)
 async def new_members_action(event):
-    if event.user_added and event.user.id == (await cli.get_me()).id:
+    # ************** تم تعديل هذا الجزء لتحسين التعامل مع الأخطاء **************
+    # التأكد أن event.user ليس None قبل الوصول لـ .id
+    # والتعامل مع أنواع الكائنات المختلفة مثل ChannelParticipantSelf
+    if event.user_added and event.user and event.user.id == (await cli.get_me()).id:
         print(f"Userbot was added to chat {event.chat_id}. Checking permissions...")
         try:
             chat_id = event.chat_id
             me = await cli.get_me()
+            # التأكد من الحصول على كائن Participant صحيح
             participant_me = await cli(GetParticipantRequest(chat_id, me.id))
             
-            has_ban_permission = getattr(participant_me.participant.admin_rights, "ban_users", False)
-            has_delete_permission = getattr(participant_me.participant.admin_rights, "delete_messages", False)
-            has_invite_permission = getattr(participant_me.participant.admin_rights, "invite_users", False)
+            # التحقق من وجود صلاحيات الإدارة قبل الوصول إليها
+            has_admin_rights_obj = getattr(participant_me.participant, "admin_rights", None)
+            
+            has_ban_permission = has_admin_rights_obj and getattr(has_admin_rights_obj, "ban_users", False)
+            has_delete_permission = has_admin_rights_obj and getattr(has_admin_rights_obj, "delete_messages", False)
+            has_invite_permission = has_admin_rights_obj and getattr(has_admin_rights_obj, "invite_users", False)
 
             if not has_ban_permission:
                 print(f"Bot added to chat {chat_id} but lacks 'ban_users' permission. Cannot perform cleanup.")
@@ -378,6 +394,9 @@ async def new_members_action(event):
         except Exception as e:
             print(f"Error checking permissions after addition to chat {event.chat_id}: {e}")
             pass
+    elif event.user_added: # لمعالجة أي حالات أخرى لـ user_added (مثل رسائل الخدمة أو إذا كان event.user=None)
+        print(f"User added event detected for chat {event.chat_id}, but specific user ID could not be determined or was a service message. Skipping detailed permission check.")
+        pass
 
 print("🔥 تيتو - بوت التصفية الفاجر يعمل الآن!")
 print(f"البوت يعمل بالتوكن: {BOT_TOKEN}")
