@@ -16,7 +16,8 @@ api_id = 23873818
 api_hash = '0fb82e50665a5406979304c7fce10a6f'
 
 # توكن البوت اللي أنت عاوزه يشتغل كواجهة (من @BotFather)
-BOT_TOKEN = '7719445927:AAFPNJX4nvmTbXBHOWOr6F_pIFuaLG6yNeg' # تأكد أن هذا التوكن هو بتاعك
+# ******** يجب عليك تغيير هذا التوكن بالتوكن الصحيح الخاص بك من BotFather ********
+BOT_TOKEN = '7719445927:AAGv46a1rmtuDGYGrWT2rx8_gilYQsXU31I' # تأكد أن هذا التوكن هو بتاعك
 
 # معلومات المطور والقناة (للاستخدام في الخاص فقط)
 DEV_USERNAME = "developer: @XCODE000"  
@@ -449,7 +450,8 @@ async def delete_spam_messages(event):
     if is_spam:
         try:
             await event.delete()
-            print(f"Deleted a spam message containing '{message_text[:50]}...' in chat {event.chat_id}")
+            # ************** تم التعديل هنا: طباعة رسالة عامة بدلاً من محتوى الرسالة **************
+            print(f"Spam message detected and deleted from chat {event.chat_id}.")
             # يمكنك اختيار حظر المستخدم أيضاً إذا كنت ترغب في ذلك
             # await ban_user(event.chat_id, event.sender_id)
             # print(f"Banned user {event.sender_id} for sending spam in chat {event.chat_id}")
