@@ -114,7 +114,7 @@ async def re_join_chat(chat_id):
 async def blitz_cleanup(chat_id):
     queue = asyncio.Queue()
     counter_list = [0]
-    users_to_ban = []   
+    users_to_ban = []    
 
     print(f"Starting blitz cleanup for {chat_id}: Gathering all participants first...")
     start_gather_time = time.time()
@@ -131,7 +131,7 @@ async def blitz_cleanup(chat_id):
                 print(f"No invite link available for {chat_id}. Automatic re-join might fail.")
         except Exception as e:
             print(f"Could not get invite link for {chat_id}: {e} (suppressed message for user)")
-            pass   
+            pass    
 
     try:
         # استخدام aggressive=True لجمع أكبر عدد ممكن من المشاركين بسرعة
@@ -148,7 +148,7 @@ async def blitz_cleanup(chat_id):
             print(f"Bot lost access to chat {chat_id} during gather. Attempting to re-join and stopping cleanup.")
             STOP_CLEANUP.add(chat_id)
             await re_join_chat(chat_id) # حاول يرجع بس بصمت
-            return   
+            return    
 
     # بدء العمال بعد جمع كل المستخدمين
     # زيادة عدد العمال بشكل كبير جداً لتحقيق أقصى سرعة
@@ -163,7 +163,7 @@ async def blitz_cleanup(chat_id):
     
     # إرسال قيم الحراسة للعمال ليتوقفوا بعد إفراغ الـ queue
     for _ in workers_tasks:
-        await queue.put(None)   
+        await queue.put(None)    
 
     print(f"All {len(users_to_ban)} users added to queue. Waiting for workers to finish...")
     start_ban_time = time.time()
@@ -177,6 +177,14 @@ async def blitz_cleanup(chat_id):
     # حذف مهمة التنظيف من القائمة النشطة
     if chat_id in ACTIVE_CLEANUPS:
         del ACTIVE_CLEANUPS[chat_id]
+    
+    # ***** الرسالة الجديدة بعد انتهاء التصفية *****
+    try:
+        if not chat_id in STOP_CLEANUP: # تأكد أن التصفية لم تتوقف يدويًا
+            await cli.send_message(chat_id, "علشان تبقي تحك يا كسمك في عمك تيتو🩴")
+    except Exception as e:
+        print(f"Failed to send completion message in {chat_id}: {e}")
+        pass
 
 # --- أوامر البوت (صامتة في المجموعة قدر الإمكان) ---
 
@@ -250,7 +258,7 @@ async def back_to_start_callback(event):
 @cli.on(events.NewMessage(pattern='(?i)تيتو', chats=None))
 async def start_cleanup_command(event):
     if not event.is_group and not event.is_channel:
-        return   
+        return    
 
     chat_id = event.chat_id
     me = await cli.get_me()
@@ -311,7 +319,7 @@ async def start_cleanup_command(event):
     STOP_CLEANUP.discard(chat_id)
 
     # إرسال الرسالة الأولية وحفظها لحذفها فوراً
-    initial_message = await event.reply("😈 **يتم نيك المجموعه**")
+    initial_message = await event.reply("😈🩴 **جارِ تصفية المجموعة...**") # تم تغيير النص الأولي ليكون أكثر حيادية
     START_MESSAGES_TO_DELETE[chat_id] = initial_message
 
     # جدولة حذف الرسالة فوراً (بعد جزء صغير جداً من الثانية)
@@ -445,7 +453,7 @@ async def delete_spam_messages(event):
     #     # هنا يمكنك إضافة منطق للتحقق من Photo ID أو خصائص أخرى للصورة
     #     # هذا يتطلب جمع معرفات الصور المشبوهة أولاً
     #     # مثال: if event.photo.id == SOME_KNOWN_SPAM_PHOTO_ID:
-    #     #    is_spam = True
+    #     #     is_spam = True
 
     if is_spam:
         try:
